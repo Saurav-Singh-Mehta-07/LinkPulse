@@ -25,7 +25,6 @@ LinkPulse shortens URLs and gives users a workspace for managing links and under
 LinkPulse/
 ├── frontend/             # UI, Vite config, frontend dependencies and lockfile
 │   ├── src/
-│   ├── public/
 │   ├── package.json
 │   └── .env.example
 ├── backend/              # API, database models, services, tests and dependencies

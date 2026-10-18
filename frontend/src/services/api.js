@@ -1,4 +1,4 @@
-const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+const apiBase = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000' : '')).replace(/\/+$/, '')
 const publicShortBase = (import.meta.env.VITE_PUBLIC_SHORT_URL || apiBase).replace(/\/+$/, '')
 let csrfToken
 let csrfPromise
@@ -37,6 +37,11 @@ async function readResponse(response) {
 }
 
 async function fetchRequest(path, options = {}) {
+  if (!apiBase && !import.meta.env.DEV) {
+    throw new ApiError('The backend URL is not configured. Set VITE_API_URL and rebuild the frontend.', {
+      code: 'CONFIG_ERROR',
+    })
+  }
   let response
   try {
     response = await fetch(`${apiBase}${path}`, {
