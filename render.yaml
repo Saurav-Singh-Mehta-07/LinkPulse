@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: linkpulse-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://linkpulse-1-m89v.onrender.com
+      - key: CORS_ORIGINS
+        value: https://linkpulse-1-m89v.onrender.com
+      - key: PUBLIC_SHORT_DOMAIN
+        value: https://linkpulse-ilrx.onrender.com
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
+  - type: web
+    name: linkpulse-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://linkpulse-ilrx.onrender.com
+      - key: VITE_PUBLIC_SHORT_URL
+        value: https://linkpulse-ilrx.onrender.com

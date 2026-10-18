@@ -4,7 +4,7 @@ Base URL: `http://localhost:4000`. JSON endpoints are under `/api`; `GET /:code`
 
 ## Runtime and configuration
 
-Copy `backend/.env.example` to `backend/.env`. The API loads `backend/.env` and then root `.env`. The Atlas URI is intentionally a placeholder; replace it with a real URI. Without `MONGODB_URI`, `/health` reports `database.connected: false`, readiness returns 503, and database-backed routes return 503.
+From `backend/`, copy `.env.example` to `.env`. The API loads its own `.env` and then the repository root `.env` as a local fallback. The Atlas URI is intentionally a placeholder; replace it with a real URI. Without `MONGODB_URI`, `/health` reports `database.connected: false`, readiness returns 503, and database-backed routes return 503.
 
 | Variable | Purpose |
 |---|---|
@@ -24,7 +24,7 @@ Copy `backend/.env.example` to `backend/.env`. The API loads `backend/.env` and 
 | `PUBLIC_SHORT_DOMAIN` | Absolute public short-link origin |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Explicit development-only seed identity |
 
-All mutating `/api` requests require a CSRF token. First call `GET /api/auth/csrf` with credentials enabled, keep the `lp_csrf` cookie, and send the returned token in `X-CSRF-Token`. Authentication uses the HTTP-only `lp_session` cookie. Cookies use `SameSite=Strict`; production cookies are `Secure`.
+All mutating `/api` requests require a CSRF token. First call `GET /api/auth/csrf` with credentials enabled, keep the `lp_csrf` cookie, and send the returned token in `X-CSRF-Token`. Authentication uses the HTTP-only `lp_session` cookie. Development cookies use `SameSite=Strict`; production cookies use `SameSite=None; Secure` to support the separately hosted frontend and API over HTTPS. CORS only allows exact configured origins.
 
 Passwords use Node.js scrypt. Session/reset tokens are random and only their SHA-256 hashes are stored. Link destinations are validated as absolute HTTP(S) URLs without credentials; the API does not fetch destinations. Click events store no raw IP address. Visitor estimates use an HMAC of the address and user-agent, bucketed by calendar month; rotating `SESSION_SECRET` resets continuity. Click history and expired/disabled links are retained; there is no TTL deletion index on links or click events. Sessions alone have an expiry TTL index.
 
@@ -115,10 +115,10 @@ Public APIs cannot assign roles. The development seed only creates an admin for 
 ## Commands
 
 ```sh
-npm run backend:dev
-npm run backend:start
-npm run backend:test
+npm run dev
+npm start
+npm test
 npm run seed:demo
 ```
 
-Tests that require no MongoDB run with `npm run backend:test`. Database integration and transaction behavior must be verified against a configured replica-set database before production deployment.
+Run these commands from `backend/`. Tests that require no MongoDB run with `npm test`. The database lifecycle test runs when `MONGODB_URI` is configured; transaction behavior must be verified against a configured replica-set database before production deployment.

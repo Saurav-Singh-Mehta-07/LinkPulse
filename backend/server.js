@@ -31,7 +31,7 @@ async function start() {
   } else {
     await connectDatabase()
   }
-  server = app.listen(env.PORT, () => logger.info({ port: env.PORT }, `LinkPulse API listening at http://localhost:${env.PORT}`))
+  server = app.listen(env.PORT, '0.0.0.0', () => logger.info({ port: env.PORT }, `LinkPulse API listening on port ${env.PORT}`))
 }
 
 process.once('SIGINT', () => shutdown('SIGINT').then(() => process.exit(0)).catch((error) => {

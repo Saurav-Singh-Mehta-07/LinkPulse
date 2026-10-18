@@ -1,11 +1,11 @@
-const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/+$/, '')
+const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 const publicShortBase = (import.meta.env.VITE_PUBLIC_SHORT_URL || apiBase).replace(/\/+$/, '')
 let csrfToken
 let csrfPromise
 
 export class ApiError extends Error {
-  constructor(message, { status = 0, code = 'NETWORK_ERROR', details = null, requestId = null } = {}) {
-    super(message)
+  constructor(message, { status = 0, code = 'NETWORK_ERROR', details = null, requestId = null, cause } = {}) {
+    super(message, { cause })
     this.name = 'ApiError'
     this.status = status
     this.code = code
@@ -18,9 +18,12 @@ async function readResponse(response) {
   if (response.status === 204) return null
   const type = response.headers.get('content-type') || ''
   if (!type.includes('application/json')) {
-    const text = await response.text()
-    if (!response.ok) throw new ApiError(text || `Request failed (${response.status}).`, { status: response.status, code: 'HTTP_ERROR' })
-    return text
+    if (!response.ok) {
+      throw new ApiError('The server returned an unexpected response. Check the API URL and try again.', {
+        status: response.status, code: 'HTTP_ERROR',
+      })
+    }
+    return response.text()
   }
   const body = await response.json()
   if (!response.ok) {
@@ -57,26 +60,43 @@ async function ensureCsrf() {
   return csrfPromise
 }
 
+async function refreshCsrf(failedToken) {
+  if (csrfToken && csrfToken !== failedToken) return csrfToken
+  csrfToken = null
+  return ensureCsrf()
+}
+
+function dispatchUnauthorized(error) {
+  if (error.status === 401) window.dispatchEvent(new CustomEvent('linkpulse:unauthorized'))
+}
+
+const csrfFailureCodes = new Set(['CSRF_TOKEN_MISSING', 'CSRF_TOKEN_INVALID', 'CSRF_TOKEN_EXPIRED'])
+
 async function request(path, { method = 'GET', body, headers = {} } = {}) {
-  const mutating = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())
-  const csrf = mutating ? await ensureCsrf() : null
+  const normalizedMethod = method.toUpperCase()
+  const mutating = !['GET', 'HEAD', 'OPTIONS'].includes(normalizedMethod)
+  let requestCsrf = null
+  const send = (csrf) => fetchRequest(path, {
+    method: normalizedMethod,
+    ...(body instanceof FormData ? { body } : body === undefined ? {} : { body: JSON.stringify(body) }),
+    headers: { ...headers, ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+  })
+
   try {
-    return await fetchRequest(path, {
-      method,
-      ...(body instanceof FormData ? { body } : body === undefined ? {} : { body: JSON.stringify(body) }),
-      headers: { ...headers, ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
-    })
+    requestCsrf = mutating ? await ensureCsrf() : null
+    return await send(requestCsrf)
   } catch (error) {
-    if (error.status === 403 && error.code === 'CSRF_TOKEN_INVALID') {
-      csrfToken = null
-      const token = await ensureCsrf()
-      return fetchRequest(path, {
-        method,
-        ...(body instanceof FormData ? { body } : body === undefined ? {} : { body: JSON.stringify(body) }),
-        headers: { ...headers, 'X-CSRF-Token': token },
-      })
+    if (mutating && error.status === 403 && csrfFailureCodes.has(error.code)) {
+      const token = await refreshCsrf(requestCsrf)
+      try {
+        // CSRF middleware rejects before any route handler can perform a mutation.
+        return await send(token)
+      } catch (retryError) {
+        dispatchUnauthorized(retryError)
+        throw retryError
+      }
     }
-    if (error.status === 401) window.dispatchEvent(new CustomEvent('linkpulse:unauthorized'))
+    dispatchUnauthorized(error)
     throw error
   }
 }
@@ -173,7 +193,7 @@ export function normalizeLink(link, relations = {}) {
   const campaign = typeof link.campaignId === 'object' && link.campaignId ? link.campaignId.name : relations.campaigns?.find((item) => item._id === link.campaignId)?.name
   const folder = typeof link.folderId === 'object' && link.folderId ? link.folderId.name : relations.folders?.find((item) => item._id === link.folderId)?.name
   const tags = (link.tagIds || []).map((tag) => typeof tag === 'object' ? tag.name : relations.tags?.find((item) => item._id === tag)?.name).filter(Boolean)
-  const shortUrl = link.shortUrl || new URL(`/${link.code}`, publicShortBase).toString()
+  const shortUrl = link.shortUrl || new URL(`/${link.code}`, publicShortBase || window.location.origin).toString()
   const expiryDate = link.expiresAt ? new Date(link.expiresAt) : null
   const isExpiringSoon = link.status === 'active' && expiryDate && expiryDate > new Date() && expiryDate <= new Date(Date.now() + 7 * 86400000)
   return {

@@ -6,6 +6,8 @@ import { verifyValue } from '../utils/crypto.js'
 import { clientCookieOptions } from '../utils/http.js'
 import { randomToken, signValue } from '../utils/crypto.js'
 
+const csrfTokenTtlMs = 24 * 60 * 60 * 1000
+
 export const corsMiddleware = cors({
   origin(origin, callback) {
     if (!origin || env.corsOrigins.includes(origin)) return callback(null, true)
@@ -18,9 +20,9 @@ export const corsMiddleware = cors({
 })
 
 export function issueCsrf(req, res) {
-  const nonce = randomToken(24)
-  const token = signValue(nonce, 'csrf')
-  res.cookie('lp_csrf', token, clientCookieOptions(24 * 60 * 60 * 1000))
+  const tokenValue = `${Date.now()}.${randomToken(24)}`
+  const token = signValue(tokenValue, 'csrf')
+  res.cookie('lp_csrf', token, clientCookieOptions(csrfTokenTtlMs))
   res.set('Cache-Control', 'no-store')
   return res.json({ csrfToken: token })
 }
@@ -33,8 +35,27 @@ export function csrfProtection(req, _res, next) {
   }
   const cookieToken = req.cookies?.lp_csrf
   const headerToken = req.get('x-csrf-token')
-  if (!cookieToken || !headerToken || cookieToken !== headerToken || !verifyValue(headerToken, 'csrf')) {
-    return next(new AppError(403, 'CSRF_TOKEN_INVALID', 'A valid CSRF token is required. Refresh the application and retry.'))
+  if (!cookieToken || !headerToken) {
+    return next(new AppError(403, 'CSRF_TOKEN_MISSING', 'A CSRF token is required. Refresh the application and retry.'))
+  }
+  if (cookieToken !== headerToken) {
+    return next(new AppError(403, 'CSRF_TOKEN_INVALID', 'The CSRF token is invalid. Refresh the application and retry.'))
+  }
+  const tokenValue = verifyValue(headerToken, 'csrf')
+  if (!tokenValue) {
+    return next(new AppError(403, 'CSRF_TOKEN_INVALID', 'The CSRF token is invalid. Refresh the application and retry.'))
+  }
+  const tokenParts = /^(\d{13})\.([A-Za-z0-9_-]{32})$/.exec(tokenValue)
+  if (!tokenParts) {
+    return next(new AppError(403, 'CSRF_TOKEN_INVALID', 'The CSRF token is invalid. Refresh the application and retry.'))
+  }
+  const issuedAt = Number(tokenParts[1])
+  const now = Date.now()
+  if (!Number.isSafeInteger(issuedAt) || issuedAt > now + 60_000) {
+    return next(new AppError(403, 'CSRF_TOKEN_INVALID', 'The CSRF token is invalid. Refresh the application and retry.'))
+  }
+  if (now - issuedAt > csrfTokenTtlMs) {
+    return next(new AppError(403, 'CSRF_TOKEN_EXPIRED', 'The CSRF token has expired. Refresh the application and retry.'))
   }
   return next()
 }

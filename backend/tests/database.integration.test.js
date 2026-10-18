@@ -44,6 +44,8 @@ itWithDatabase('MongoDB API lifecycle: auth, ownership, link rules, redirects, a
   await connectDatabase()
   assert.equal(databaseStatus().connected, true, 'MongoDB indexes must finish before integration checks')
 
+  await request(app).get('/api/links').expect(401)
+
   const suffix = randomUUID()
   const users = []
   const links = []
@@ -65,6 +67,18 @@ itWithDatabase('MongoDB API lifecycle: auth, ownership, link rules, redirects, a
     const ownerId = new mongoose.Types.ObjectId(registration.body.user.id)
     users.push(ownerId)
     assert.equal((await owner.get('/api/auth/me').expect(200)).body.user.id, ownerId.toString())
+
+    const duplicateRegistration = await register(owner, 'Lifecycle Owner', emails.owner, password)
+    assert.equal(duplicateRegistration.status, 409)
+    assert.equal(duplicateRegistration.body.error.code, 'DUPLICATE_RESOURCE')
+
+    const invalidLogin = request.agent(app)
+    await csrf(invalidLogin)
+    const invalidCredentials = await mutate(invalidLogin, 'post', '/api/auth/login', {
+      email: emails.owner, password: 'incorrect-password',
+    })
+    assert.equal(invalidCredentials.status, 401)
+    assert.equal(invalidCredentials.body.error.code, 'INVALID_CREDENTIALS')
 
     const roleInjection = request.agent(app)
     await csrf(roleInjection)

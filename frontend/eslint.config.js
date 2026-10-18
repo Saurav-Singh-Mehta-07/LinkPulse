@@ -4,7 +4,7 @@ import react from 'eslint-plugin-react'
 
 export default [
   {
-    ignores: ['node_modules/**', 'dist/**', 'frontend/dist/**', '.vite/**'],
+    ignores: ['node_modules/**', 'dist/**', 'coverage/**'],
   },
   js.configs.recommended,
   {
@@ -20,7 +20,7 @@ export default [
     },
   },
   {
-    files: ['frontend/**/*.jsx'],
+    files: ['src/**/*.jsx'],
     plugins: { react },
     rules: {
       'react/jsx-uses-vars': 'error',

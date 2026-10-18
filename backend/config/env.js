@@ -1,7 +1,11 @@
 import dotenv from 'dotenv'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
-dotenv.config({ path: ['backend/.env', '.env'] })
+const backendDirectory = fileURLToPath(new URL('../', import.meta.url))
+const repositoryDirectory = path.resolve(backendDirectory, '..')
+dotenv.config({ path: [path.join(backendDirectory, '.env'), path.join(repositoryDirectory, '.env')] })
 
 const httpUrl = z.string().url().refine((value) => {
   try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
@@ -40,6 +44,7 @@ export function parseEnv(source = process.env) {
   const env = parsed.data
   env.corsOrigins = env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
   env.cookieSecure = env.NODE_ENV === 'production'
+  env.cookieSameSite = env.NODE_ENV === 'production' ? 'none' : 'strict'
   env.smtpSecure = env.SMTP_SECURE === 'true'
   return env
 }

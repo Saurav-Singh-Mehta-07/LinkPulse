@@ -4,7 +4,7 @@ export function cookieOptions(maxAge) {
   return {
     httpOnly: true,
     secure: env.cookieSecure,
-    sameSite: 'strict',
+    sameSite: env.cookieSameSite,
     path: '/',
     ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
     ...(maxAge ? { maxAge } : {}),
